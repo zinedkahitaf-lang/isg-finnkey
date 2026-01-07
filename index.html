@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>İSG Chat + Fotoğraftan FINN KEY</title>
+<title>İSG Finn Key – Fatih Akdeniz</title>
 
 <style>
 :root{
@@ -40,10 +40,9 @@ body{
   box-shadow: var(--shadow);
   backdrop-filter: blur(14px);
 }
-.brand h1{margin:0;font-size:18px}
-.brand p{margin:2px 0 0;font-size:12px;color:var(--muted)}
-
-.badges{display:flex;gap:10px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:20px;letter-spacing:.2px}
+.brand p{margin:6px 0 0;font-size:13px;color:var(--muted)}
+.badges{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 .badge{
   padding:8px 10px;border-radius:999px;
   border:1px solid var(--line);
@@ -51,8 +50,9 @@ body{
   color:var(--muted);
   font-size:12px;
 }
+.badge strong{color:#fff}
 
-.tabs{margin-top:18px;display:flex;gap:10px}
+.tabs{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
 .tab{
   border:1px solid var(--line);
   background: rgba(255,255,255,.06);
@@ -60,7 +60,7 @@ body{
   border-radius:14px;
   cursor:pointer;
   color:var(--muted);
-  font-weight:650;
+  font-weight:750;
   font-size:13px;
 }
 .tab.active{
@@ -72,7 +72,6 @@ body{
 @media (min-width: 980px){
   .grid{grid-template-columns: 1.15fr .85fr;}
 }
-
 .card{
   border:1px solid var(--line);
   background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.05));
@@ -82,6 +81,7 @@ body{
 }
 .cardHeader{
   padding:16px;border-bottom:1px solid rgba(255,255,255,.10);
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
 }
 .cardHeader h2{margin:0;font-size:14px}
 .cardBody{padding:16px}
@@ -117,7 +117,7 @@ input{
 button{
   border:0;border-radius:14px;
   padding:12px 14px;
-  font-weight:800;
+  font-weight:900;
   cursor:pointer;color:#fff;
 }
 .btnPrimary{background: linear-gradient(135deg, var(--accent1), var(--accent2))}
@@ -136,6 +136,9 @@ button{
   font-size:12px;
   margin-top:14px;
 }
+small.hint{color:var(--muted)}
+hr.sep{border:0;border-top:1px solid rgba(255,255,255,.10);margin:10px 0}
+.hidden{display:none}
 </style>
 </head>
 
@@ -144,12 +147,14 @@ button{
 
   <div class="topbar">
     <div class="brand">
-      <h1>İSG Karar Destek Aracı</h1>
-      <p>Fotoğraftan FINN KEY & İSG Sohbet</p>
+      <h1>İSG Finn Key</h1>
+      <p><strong>Hazırlayan: Fatih Akdeniz</strong> – İş Güvenliği Uzmanı (B) • Fotoğraftan risk analizi & İSG sohbet</p>
+      <small class="hint">Not: Bu uygulama ön değerlendirme amaçlıdır.</small>
     </div>
     <div class="badges">
-      <div class="badge">Hazırlayan: Fatih Akdeniz</div>
-      <div class="badge">İş Güvenliği Uzmanı (B)</div>
+      <div class="badge">API Key: <strong>Gizli</strong></div>
+      <div class="badge">Swagger: <strong>/docs</strong></div>
+      <div class="badge">Sürüm: <strong>v1.0</strong></div>
     </div>
   </div>
 
@@ -159,100 +164,145 @@ button{
   </div>
 
   <div class="grid">
-    <div class="card">
-      <div class="cardHeader"><h2>Sohbet</h2></div>
+    <div class="card" id="chatCard">
+      <div class="cardHeader"><h2>İSG Sohbet</h2></div>
       <div class="cardBody">
         <div class="chatBox" id="chat"></div>
         <div style="display:flex;gap:10px;margin-top:10px">
           <input id="chatInput" placeholder="İSG ile ilgili durumu yaz…" />
           <button class="btnPrimary" id="sendBtn">Gönder</button>
         </div>
+        <small class="hint">İpucu: “İşe yeni başladım, sahada şunlar var…” gibi yaz.</small>
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="finnCard">
       <div class="cardHeader"><h2>Fotoğraftan FINN KEY</h2></div>
       <div class="cardBody">
         <input id="photo" type="file" accept="image/*" />
-        <input id="note" placeholder="Kısa not (isteğe bağlı)" />
+        <div style="height:10px"></div>
+        <input id="note" placeholder="Kısa not (isteğe bağlı) – örn: iskele kontrolü" />
         <div style="display:flex;gap:10px;margin-top:10px">
           <button class="btnWarn" id="finnBtn">Analiz Et</button>
           <button class="btnDark" id="copyBtn">Kopyala</button>
         </div>
+        <hr class="sep"/>
         <div class="output" id="out">—</div>
       </div>
     </div>
   </div>
 
   <div class="footer">
-    İş Sağlığı ve Güvenliği • Yapay Zeka Destekli Ön Değerlendirme
+    © 2026 – Fatih Akdeniz | İş Güvenliği Uzmanı (B)
   </div>
 
 </div>
 
 <script>
-// ✅ Render + local için en doğru yöntem: same-origin
-// Yani istekleri /chat ve /photo-finnkey olarak aynı domain’e atar.
+/**
+ * Render + Prod için doğru yöntem:
+ * Aynı domain üzerinde çalıştığı için BASE = "" (relative) kullanıyoruz.
+ * Böylece istekler: /chat ve /photo-finnkey olarak gider.
+ */
 const BASE = "";
 
-const chatEl=document.getElementById("chat");
-const chatInput=document.getElementById("chatInput");
-const photo=document.getElementById("photo");
-const note=document.getElementById("note");
-const out=document.getElementById("out");
+const chatEl = document.getElementById("chat");
+const chatInput = document.getElementById("chatInput");
+const out = document.getElementById("out");
+const photo = document.getElementById("photo");
+const note = document.getElementById("note");
 
-const history=[{role:"assistant",content:"Merhaba. İSG ile ilgili durumu kısaca anlatır mısın?"}];
+const history = [
+  {role:"assistant", content:"Merhaba. Sahadaki durumu 2-3 cümleyle anlatır mısın? (iş türü, risk, ekipman vb.)"}
+];
 
-function render(){
+function renderChat(){
   chatEl.innerHTML="";
   history.forEach(m=>{
-    const d=document.createElement("div");
-    d.className="msg "+(m.role==="user"?"user":"assistant");
-    const b=document.createElement("div");
-    b.className="bubble";
-    b.textContent=m.content;
-    d.appendChild(b);
-    chatEl.appendChild(d);
+    const row=document.createElement("div");
+    row.className="msg "+(m.role==="user"?"user":"assistant");
+    const bubble=document.createElement("div");
+    bubble.className="bubble";
+    bubble.textContent=m.content;
+    row.appendChild(bubble);
+    chatEl.appendChild(row);
   });
   chatEl.scrollTop=chatEl.scrollHeight;
 }
-render();
+renderChat();
 
 async function sendChat(){
-  const t=chatInput.value.trim();
+  const t = (chatInput.value || "").trim();
   if(!t) return;
-  history.push({role:"user",content:t});
+
+  history.push({role:"user", content:t});
   chatInput.value="";
-  render();
+  renderChat();
 
-  const r=await fetch(BASE+"/chat",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({messages:history})
-  });
+  try{
+    const r = await fetch(BASE + "/chat", {
+      method:"POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({messages: history})
+    });
 
-  const d=await r.json();
-  history.push({role:"assistant",content:d.reply||"Hata"});
-  render();
+    const d = await r.json();
+    if(!r.ok){
+      history.push({role:"assistant", content: "Hata: " + (d.error || "Sunucu hatası")});
+    }else{
+      history.push({role:"assistant", content: d.reply || "Yanıt boş geldi."});
+    }
+  }catch(e){
+    history.push({role:"assistant", content: "Bağlantı hatası: " + e.message});
+  }
+
+  renderChat();
 }
 
 async function runFinnKey(){
-  const f=photo.files[0];
-  if(!f){out.textContent="Fotoğraf seç.";return;}
+  const f = photo.files[0];
+  if(!f){
+    out.textContent="Fotoğraf seç.";
+    return;
+  }
+
   out.textContent="Analiz ediliyor…";
 
-  const fd=new FormData();
-  fd.append("file",f);
-  fd.append("note",note.value||"");
+  try{
+    const fd = new FormData();
+    fd.append("file", f);
+    fd.append("note", note.value || "");
 
-  const r=await fetch(BASE+"/photo-finnkey",{method:"POST",body:fd});
-  const d=await r.json();
-  out.textContent=d.result||"Hata";
+    const r = await fetch(BASE + "/photo-finnkey", { method:"POST", body: fd });
+    const d = await r.json();
+
+    if(!r.ok){
+      out.textContent = "Hata: " + (d.error || "Sunucu hatası");
+    }else{
+      out.textContent = d.result || "Sonuç boş geldi.";
+    }
+  }catch(e){
+    out.textContent="Bağlantı hatası: " + e.message;
+  }
 }
 
-document.getElementById("sendBtn").onclick=sendChat;
-document.getElementById("finnBtn").onclick=runFinnKey;
-document.getElementById("copyBtn").onclick=()=>navigator.clipboard.writeText(out.textContent||"");
+document.getElementById("sendBtn").onclick = sendChat;
+document.getElementById("finnBtn").onclick = runFinnKey;
+document.getElementById("copyBtn").onclick = () => navigator.clipboard.writeText(out.textContent || "");
+
+// Enter ile gönder
+chatInput.addEventListener("keydown", (e)=>{
+  if(e.key==="Enter") sendChat();
+});
+
+// Sekmeler
+document.querySelectorAll(".tab").forEach(tab=>{
+  tab.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+    tab.classList.add("active");
+    // İstersek ileride ayrı görünüm yaparız; şimdilik aynı ekranda.
+  });
+});
 </script>
 
 </body>
