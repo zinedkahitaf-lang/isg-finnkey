@@ -1,23 +1,11 @@
 import os
 import base64
-from typing import List, Literal
-
-from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
-from pydantic import BaseModel
+from fastapi.responses import FileResponse
 from openai import OpenAI
 
-load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise RuntimeError("OPENAI_API_KEY yok")
-
-client = OpenAI(api_key=api_key)
-
-TEXT_MODEL = "gpt-4o-mini"
-VISION_MODEL = "gpt-4o-mini"
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 app = FastAPI(title="ISG Finn Key", version="1.0")
 
@@ -28,64 +16,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SYSTEM_CHAT = """Sen bir İş Güvenliği Uzmanı asistanısın.
-Türkçe cevap ver.
-Sahaya uygun, net ve uygulanabilir öneriler sun.
-"""
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-Role = Literal["user", "assistant"]
+# -------------------------
+# ANA SAYFA (UI)
+# -------------------------
+@app.get("/")
+def home():
+    return FileResponse(os.path.join(BASE_DIR, "index.html"))
 
-class Msg(BaseModel):
-    role: Role
-    content: str
-
-class ChatRequest(BaseModel):
-    messages: List[Msg]
-
+# -------------------------
+# SOHBET
+# -------------------------
 @app.post("/chat")
-def chat(req: ChatRequest):
-    messages = [{"role": "system", "content": SYSTEM_CHAT}]
-    messages += [{"role": m.role, "content": m.content} for m in req.messages[-20:]]
-
-    resp = client.responses.create(
-        model=TEXT_MODEL,
-        input=messages,
-        max_output_tokens=800
+async def chat(payload: dict):
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Sen bir İş Güvenliği Uzmanısın. Türkçe cevap ver."},
+            *payload["messages"]
+        ]
     )
-    return {"reply": resp.output_text.strip()}
+    return {"reply": resp.choices[0].message.content}
 
-SYSTEM_FINNKEY = """Fotoğrafı analiz et.
-FINN KEY maddeleri, risk skoru ve aksiyonlar üret.
-"""
-
-FOOTER = "\n\n---\nHazırlayan: Fatih Akdeniz"
-
+# -------------------------
+# FOTOĞRAF → FINN KEY
+# -------------------------
 @app.post("/photo-finnkey")
 async def photo_finnkey(
     file: UploadFile = File(...),
     note: str = Form("")
 ):
-    image_bytes = await file.read()
-    b64 = base64.b64encode(image_bytes).decode()
-    data_url = f"data:{file.content_type};base64,{b64}"
+    img = await file.read()
+    b64 = base64.b64encode(img).decode()
 
-    resp = client.responses.create(
-        model=VISION_MODEL,
-        input=[
-            {"role": "system", "content": SYSTEM_FINNKEY},
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
             {
                 "role": "user",
                 "content": [
-                    {"type": "input_text", "text": note},
-                    {"type": "input_image", "image_url": data_url},
-                ],
-            },
-        ],
-        max_output_tokens=900
+                    {"type": "text", "text": f"Not: {note}"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+                ]
+            }
+        ]
     )
-
-    return {"result": resp.output_text.strip() + FOOTER}
-
-@app.get("/")
-def home():
-    return FileResponse("index.html")
+    return {"result": resp.choices[0].message.content}
