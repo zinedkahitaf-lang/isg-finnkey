@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>İSG Finn Key</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{
+  font-family: Arial, sans-serif;
+  background:#0f172a;
+  color:#fff;
+  margin:0;
+  padding:20px;
+}
+.container{
+  max-width:900px;
+  margin:auto;
+}
+h1{margin-bottom:5px}
+.box{
+  background:#020617;
+  border-radius:12px;
+  padding:16px;
+  margin-bottom:20px;
+}
+input,textarea,button{
+  width:100%;
+  padding:10px;
+  margin-top:8px;
+  border-radius:8px;
+  border:none;
+}
+button{
+  background:#2563eb;
+  color:#fff;
+  font-weight:bold;
+  cursor:pointer;
+}
+pre{
+  white-space:pre-wrap;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>İSG Finn Key</h1>
+<p>Fotoğraftan risk analizi & İSG sohbet</p>
+
+<div class="box">
+<h3>Sohbet</h3>
+<textarea id="chatInput" placeholder="İSG sorunu yaz..."></textarea>
+<button onclick="sendChat()">Gönder</button>
+<pre id="chatOut"></pre>
+</div>
+
+<div class="box">
+<h3>Fotoğraftan FINN KEY</h3>
+<input type="file" id="photo">
+<input type="text" id="note" placeholder="Not (isteğe bağlı)">
+<button onclick="sendPhoto()">Analiz Et</button>
+<pre id="photoOut"></pre>
+</div>
+
+</div>
+
+<script>
+async function sendChat(){
+  const text=document.getElementById("chatInput").value;
+  const r=await fetch("/chat",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({messages:[{role:"user",content:text}]})
+  });
+  const d=await r.json();
+  document.getElementById("chatOut").textContent=d.reply||"Hata";
+}
+
+async function sendPhoto(){
+  const f=document.getElementById("photo").files[0];
+  if(!f){alert("Fotoğraf seç");return;}
+  const fd=new FormData();
+  fd.append("file",f);
+  fd.append("note",document.getElementById("note").value);
+  const r=await fetch("/photo-finnkey",{method:"POST",body:fd});
+  const d=await r.json();
+  document.getElementById("photoOut").textContent=d.result||"Hata";
+}
+</script>
+
+</body>
+</html>
