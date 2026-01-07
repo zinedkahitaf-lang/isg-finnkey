@@ -2,25 +2,37 @@ import os
 import base64
 from typing import List, Literal
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from pydantic import BaseModel
 from openai import OpenAI
 
-# Render'da key ENV'den gelir: OPENAI_API_KEY
+# -----------------------------
+# SETTINGS
+# -----------------------------
+load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
+
 if not api_key:
-    raise RuntimeError("OPENAI_API_KEY bulunamadı. Render > Environment Variables kontrol et.")
+    raise RuntimeError("OPENAI_API_KEY bulunamadı. Render Environment Variables'a ekle.")
 
 client = OpenAI(api_key=api_key)
 
-TEXT_MODEL = os.getenv("TEXT_MODEL", "gpt-4o-mini")
-VISION_MODEL = os.getenv("VISION_MODEL", "gpt-4o-mini")
+TEXT_MODEL = "gpt-4o-mini"
+VISION_MODEL = "gpt-4o-mini"
 
-app = FastAPI(title="ISG Finn Key", version="1.0")
+# Swagger /docs'ta kalsın, ana sayfa (/) bizim index.html olsun
+app = FastAPI(
+    title="ISG Finn Key",
+    version="1.0",
+    docs_url="/docs",
+    redoc_url=None,
+    openapi_url="/openapi.json",
+)
 
-# CORS: eğer her şey aynı domain'de ise şart değil ama kalsın
+# Render'da aynı domain üzerinden çalışacağımız için CORS serbest
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,6 +41,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INDEX_PATH = os.path.join(BASE_DIR, "index.html")
+
+# -----------------------------
+# ROOT (UI)
+# -----------------------------
+@app.get("/", include_in_schema=False)
+def home():
+    # index.html yoksa servis patlamasın, net hata dönsün
+    if not os.path.exists(INDEX_PATH):
+        return HTMLResponse(
+            "<h2>index.html bulunamadı</h2>"
+            "<p>Repo kökünde (app.py ile aynı klasörde) <b>index.html</b> olmalı.</p>",
+            status_code=500,
+        )
+    return FileResponse(INDEX_PATH)
+
+
+# -----------------------------
+# CHAT API
+# -----------------------------
 SYSTEM_CHAT = """Sen bir İş Güvenliği Uzmanı asistanısın.
 Türkçe cevap ver.
 Sahaya uygun, net ve uygulanabilir öneriler sun.
@@ -57,6 +90,9 @@ def chat(req: ChatRequest):
     return {"reply": resp.output_text.strip()}
 
 
+# -----------------------------
+# PHOTO -> FINN KEY API
+# -----------------------------
 SYSTEM_FINNKEY = """Sen bir İş Güvenliği Uzmanı asistanısın.
 
 Kullanıcı bir saha / şantiye fotoğrafı yüklüyor.
@@ -116,12 +152,3 @@ async def photo_finnkey(
     )
 
     return {"result": resp.output_text.strip() + FOOTER}
-
-
-# Root'ta index.html servis et
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-@app.get("/")
-def home():
-    path = os.path.join(BASE_DIR, "index.html")
-    return FileResponse(path)
