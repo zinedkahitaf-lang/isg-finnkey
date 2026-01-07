@@ -193,9 +193,23 @@ button{
 </div>
 
 <script>
-const BASE="http://127.0.0.1:8000";
-const chatEl=document.getElementById("chat");
-const history=[{role:"assistant",content:"Merhaba. İSG ile ilgili durumu kısaca anlatır mısın?"}];
+// ✅ Render + local için en doğru yöntem: same-origin
+// Yani istekleri /chat ve /photo-finnkey olarak aynı domain'e atar.
+const BASE = "";
+
+const chatEl = document.getElementById("chat");
+const chatInput = document.getElementById("chatInput");
+const sendBtn = document.getElementById("sendBtn");
+
+const photo = document.getElementById("photo");
+const note = document.getElementById("note");
+const finnBtn = document.getElementById("finnBtn");
+const copyBtn = document.getElementById("copyBtn");
+const out = document.getElementById("out");
+
+const history = [
+  {role:"assistant", content:"Merhaba. İSG ile ilgili durumu kısaca anlatır mısın?"}
+];
 
 function render(){
   chatEl.innerHTML="";
@@ -213,33 +227,68 @@ function render(){
 render();
 
 async function sendChat(){
-  const t=chatInput.value.trim();
+  const t = chatInput.value.trim();
   if(!t) return;
-  history.push({role:"user",content:t});
+
+  history.push({role:"user", content:t});
   chatInput.value="";
   render();
-  const r=await fetch(BASE+"/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:history})});
-  const d=await r.json();
-  history.push({role:"assistant",content:d.reply||"Hata"});
+
+  try{
+    sendBtn.disabled = true;
+    sendBtn.textContent = "Gönderiliyor…";
+
+    const r = await fetch(BASE + "/chat", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ messages: history })
+    });
+
+    const d = await r.json();
+    history.push({role:"assistant", content: d.reply || d.error || "Cevap gelmedi."});
+  }catch(e){
+    history.push({role:"assistant", content:"Bağlantı hatası. Sunucu çalışıyor mu?"});
+  }finally{
+    sendBtn.disabled = false;
+    sendBtn.textContent = "Gönder";
+  }
+
   render();
 }
 
 async function runFinnKey(){
-  const f=photo.files[0];
-  if(!f){out.textContent="Fotoğraf seç.";return;}
+  const f = photo.files[0];
+  if(!f){ out.textContent="Fotoğraf seç."; return; }
+
   out.textContent="Analiz ediliyor…";
-  const fd=new FormData();
-  fd.append("file",f);
-  fd.append("note",note.value||"");
-  const r=await fetch(BASE+"/photo-finnkey",{method:"POST",body:fd});
-  const d=await r.json();
-  out.textContent=d.result||"Hata";
+
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("note", note.value || "");
+
+  try{
+    finnBtn.disabled = true;
+    finnBtn.textContent = "Analiz…";
+
+    const r = await fetch(BASE + "/photo-finnkey", { method:"POST", body: fd });
+    const d = await r.json();
+
+    out.textContent = d.result || d.error || "Hata";
+  }catch(e){
+    out.textContent="Bağlantı hatası. Sunucu çalışıyor mu?";
+  }finally{
+    finnBtn.disabled = false;
+    finnBtn.textContent = "Analiz Et";
+  }
 }
 
-document.getElementById("sendBtn").onclick=sendChat;
-document.getElementById("finnBtn").onclick=runFinnKey;
-document.getElementById("copyBtn").onclick=()=>navigator.clipboard.writeText(out.textContent||"");
+sendBtn.addEventListener("click", sendChat);
+chatInput.addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendChat(); });
+
+finnBtn.addEventListener("click", runFinnKey);
+copyBtn.addEventListener("click", ()=>navigator.clipboard.writeText(out.textContent||""));
 </script>
 
 </body>
 </html>
+
