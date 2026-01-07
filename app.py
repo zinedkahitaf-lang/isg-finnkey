@@ -129,8 +129,19 @@ async def photo_finnkey(
     return {
         "result": resp.output_text.strip() + FOOTER
     }
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import os
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Eğer bir "static" klasörün yoksa bu satır şart değil, ama varsa iyi olur:
+# app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+
+@app.get("/")
+def home():
+    return FileResponse(os.path.join(BASE_DIR, "index.html"))
+
+    
+
 
