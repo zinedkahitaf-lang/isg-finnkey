@@ -1,65 +1,127 @@
 import os
 import base64
+from typing import List, Literal
+
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse, FileResponse
+from pydantic import BaseModel
 from openai import OpenAI
 
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+# Render'da key ENV'den gelir: OPENAI_API_KEY
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise RuntimeError("OPENAI_API_KEY bulunamadı. Render > Environment Variables kontrol et.")
+
+client = OpenAI(api_key=api_key)
+
+TEXT_MODEL = os.getenv("TEXT_MODEL", "gpt-4o-mini")
+VISION_MODEL = os.getenv("VISION_MODEL", "gpt-4o-mini")
 
 app = FastAPI(title="ISG Finn Key", version="1.0")
 
+# CORS: eğer her şey aynı domain'de ise şart değil ama kalsın
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SYSTEM_CHAT = """Sen bir İş Güvenliği Uzmanı asistanısın.
+Türkçe cevap ver.
+Sahaya uygun, net ve uygulanabilir öneriler sun.
+GPT, OpenAI gibi ifadeler kullanma.
+"""
 
-# -------------------------
-# ANA SAYFA (UI)
-# -------------------------
-@app.get("/")
-def home():
-    return FileResponse(os.path.join(BASE_DIR, "index.html"))
+Role = Literal["user", "assistant"]
 
-# -------------------------
-# SOHBET
-# -------------------------
+class Msg(BaseModel):
+    role: Role
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: List[Msg]
+
 @app.post("/chat")
-async def chat(payload: dict):
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "Sen bir İş Güvenliği Uzmanısın. Türkçe cevap ver."},
-            *payload["messages"]
-        ]
-    )
-    return {"reply": resp.choices[0].message.content}
+def chat(req: ChatRequest):
+    messages = [{"role": "system", "content": SYSTEM_CHAT}]
+    messages += [{"role": m.role, "content": m.content} for m in req.messages[-20:]]
 
-# -------------------------
-# FOTOĞRAF → FINN KEY
-# -------------------------
+    resp = client.responses.create(
+        model=TEXT_MODEL,
+        input=messages,
+        max_output_tokens=800
+    )
+    return {"reply": resp.output_text.strip()}
+
+
+SYSTEM_FINNKEY = """Sen bir İş Güvenliği Uzmanı asistanısın.
+
+Kullanıcı bir saha / şantiye fotoğrafı yüklüyor.
+Fotoğrafı analiz et ve aşağıdaki formatta cevap ver:
+
+FINN KEY (Ana Bulgular):
+1) ...
+2) ...
+3) ...
+4) ...
+5) ...
+
+- Risk Skoru: 0-100 (kısa gerekçe)
+- İlk 3 Aksiyon: (hemen yapılacak net maddeler)
+
+Emin olmadığın konuları 'olası' diye belirt.
+Kişisel veri tespiti yapma.
+GPT, OpenAI gibi ifadeler kullanma.
+"""
+
+FOOTER = """
+----------------------------
+Hazırlayan: Fatih Akdeniz
+İş Güvenliği Uzmanı (B)
+Not: Bu çıktı yapay zeka destekli bir ön değerlendirmedir.
+----------------------------
+"""
+
 @app.post("/photo-finnkey")
 async def photo_finnkey(
     file: UploadFile = File(...),
     note: str = Form("")
 ):
-    img = await file.read()
-    b64 = base64.b64encode(img).decode()
+    image_bytes = await file.read()
+    if not image_bytes:
+        return JSONResponse({"error": "Boş dosya"}, status_code=400)
 
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    mime = file.content_type or "image/jpeg"
+    data_url = f"data:{mime};base64,{b64}"
+
+    user_text = f"Kullanıcı notu: {note or '—'}"
+
+    resp = client.responses.create(
+        model=VISION_MODEL,
+        input=[
+            {"role": "system", "content": SYSTEM_FINNKEY},
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Not: {note}"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
-                ]
-            }
-        ]
+                    {"type": "input_text", "text": user_text},
+                    {"type": "input_image", "image_url": data_url},
+                ],
+            },
+        ],
+        max_output_tokens=900
     )
-    return {"result": resp.choices[0].message.content}
+
+    return {"result": resp.output_text.strip() + FOOTER}
+
+
+# Root'ta index.html servis et
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+@app.get("/")
+def home():
+    path = os.path.join(BASE_DIR, "index.html")
+    return FileResponse(path)
